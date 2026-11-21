@@ -4,11 +4,17 @@ import prisma from './config/database';
 
 const startServer = async () => {
   try {
-    // Test database connection
-    await prisma.$connect();
-    console.log('✅ Database connected successfully');
-
     const app = createApp();
+
+    // Test database connection
+    try {
+      await prisma.$connect();
+      console.log('✅ Database connected successfully');
+    } catch (dbError: any) {
+      console.warn('⚠️  Database connection could not be established immediately:');
+      console.warn(`   ${dbError.message || dbError}`);
+      console.warn('👉 To enable database queries, start PostgreSQL and update DATABASE_URL in .env');
+    }
 
     app.listen(config.app.port, () => {
       console.log(`

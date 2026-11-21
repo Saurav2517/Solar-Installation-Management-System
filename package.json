@@ -14,6 +14,7 @@
     "prisma:studio": "prisma studio",
     "prisma:reset": "prisma migrate reset --force",
     "test": "jest --passWithNoTests",
+    "test:smoke": "node scripts/test-terminal.js",
     "test:watch": "jest --watch",
     "lint": "eslint src/**/*.ts",
     "swagger": "ts-node src/utils/swagger-generate.ts"
