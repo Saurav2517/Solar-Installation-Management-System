@@ -1,0 +1,1026 @@
+// This is your Prisma schema file for SIMS
+// Solar Installation Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  SALES_EXECUTIVE
+  WAREHOUSE_MANAGER
+  INSTALLATION_TECHNICIAN
+  CUSTOMER
+  SUPPORT_EXECUTIVE
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  SITE_SURVEY_SCHEDULED
+  SITE_SURVEY_COMPLETED
+  QUOTATION_SENT
+  NEGOTIATION
+  CONVERTED
+  LOST
+  CLOSED
+}
+
+enum SurveyApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SystemType {
+  ON_GRID
+  OFF_GRID
+}
+
+enum QuotationStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  REVISED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  DISPATCHED
+  COMPLETED
+  CANCELLED
+}
+
+enum StockMovementType {
+  PURCHASE
+  DISPATCH
+  RETURN
+  ADJUSTMENT
+  TRANSFER
+  ALLOCATION
+}
+
+enum InstallationStatus {
+  SCHEDULED
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum WarrantyClaimStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  REPLACEMENT_DISPATCHED
+  RESOLVED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketStatus {
+  OPEN
+  ASSIGNED
+  IN_PROGRESS
+  WAITING_FOR_PARTS
+  RESOLVED
+  CLOSED
+  REOPENED
+}
+
+enum PaymentType {
+  ADVANCE
+  PARTIAL
+  FULL
+  REFUND
+  SUBSIDY
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  UPI
+  CHEQUE
+  CREDIT_CARD
+  DEBIT_CARD
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum ExpenseCategory {
+  MATERIAL_PURCHASE
+  LABOUR
+  TRANSPORT
+  EQUIPMENT
+  MAINTENANCE
+  OFFICE
+  OTHER
+}
+
+enum SubsidyStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  DOCUMENTS_REQUESTED
+  APPROVED
+  REJECTED
+  PAYMENT_RECEIVED
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum NotificationType {
+  INFO
+  WARNING
+  ALERT
+  REMINDER
+  SYSTEM
+}
+
+enum ReadingSource {
+  INVERTER_API
+  MQTT
+  MANUAL
+  SIMULATED
+}
+
+enum WarrantyEventType {
+  DELIVERY
+  COMMISSIONING
+  INSTALLATION_COMPLETE
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+// --- Authentication & Users ---
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  phone         String?
+  role          UserRole  @default(CUSTOMER)
+  isActive      Boolean   @default(true) @map("is_active")
+  avatar        String?
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  refreshTokens       RefreshToken[]
+  customer             Customer?
+  assignedLeads        Lead[]               @relation("SalesExecutiveLeads")
+  surveys              SiteSurvey[]         @relation("SurveyCreatedBy")
+  surveyApprovals      SiteSurvey[]         @relation("SurveyApprovedBy")
+  quotationsCreated    Quotation[]          @relation("QuotationCreatedBy")
+  quotationsApproved   Quotation[]          @relation("QuotationApprovedBy")
+  technicianAssignments TechnicianAssignment[]
+  serviceTicketsCreated ServiceTicket[]     @relation("TicketCreatedBy")
+  serviceTicketsAssigned ServiceTicket[]    @relation("TicketAssignedTo")
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+  expensesCreated      Expense[]
+  paymentsRecorded     Payment[]           @relation("PaymentRecordedBy")
+  subsidyApplications  SubsidyApplication[] @relation("SubsidyCreatedBy")
+  installationsCreated Installation[]      @relation("InstallationCreatedBy")
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  userId      String   @map("user_id")
+  expiresAt   DateTime @map("expires_at")
+  isRevoked   Boolean  @default(false) @map("is_revoked")
+  deviceInfo  String?  @map("device_info")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// --- Customer Management ---
+
+model Customer {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  address         String?
+  city            String?
+  state           String?
+  pincode         String?
+  gstNumber       String?  @map("gst_number")
+  aadharNumber    String?  @map("aadhar_number")
+  electricityBoard String? @map("electricity_board")
+  consumerNumber  String?  @map("consumer_number")
+  sanctionedLoad  Decimal? @map("sanctioned_load") @db.Decimal(10, 2)
+  monthlyBill     Decimal? @map("monthly_bill") @db.Decimal(10, 2)
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leads               Lead[]
+  siteSurveys         SiteSurvey[]
+  quotations          Quotation[]
+  orders              Order[]
+  installations       Installation[]
+  payments            Payment[]
+  warranties          Warranty[]
+  serviceTickets      ServiceTicket[]
+  subsidyApplications SubsidyApplication[]
+
+  @@index([userId])
+  @@index([city, state])
+  @@map("customers")
+}
+
+// --- Lead Management ---
+
+model Lead {
+  id                String     @id @default(uuid())
+  customerId        String     @map("customer_id")
+  salesExecutiveId  String?    @map("sales_executive_id")
+  source            String?
+  status            LeadStatus @default(NEW)
+  systemTypeInterest SystemType? @map("system_type_interest")
+  capacityInterest  Decimal?   @map("capacity_interest") @db.Decimal(10, 2)
+  requirements      String?
+  remarks           String?
+  followUpDate      DateTime?  @map("follow_up_date")
+  convertedAt       DateTime?  @map("converted_at")
+  lostReason        String?    @map("lost_reason")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  updatedAt         DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  customer        Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  salesExecutive  User?       @relation("SalesExecutiveLeads", fields: [salesExecutiveId], references: [id])
+  siteSurveys     SiteSurvey[]
+  quotations      Quotation[]
+
+  @@index([customerId])
+  @@index([salesExecutiveId])
+  @@index([status])
+  @@map("leads")
+}
+
+// --- Site Survey Management ---
+
+model SiteSurvey {
+  id                    String               @id @default(uuid())
+  customerId            String               @map("customer_id")
+  leadId                String?              @map("lead_id")
+  createdById           String               @map("created_by_id")
+  approvedById          String?              @map("approved_by_id")
+
+  // Roof details
+  roofArea              Decimal?             @map("roof_area") @db.Decimal(10, 2)
+  roofDirection         String?              @map("roof_direction")
+  roofTilt              Decimal?             @map("roof_tilt") @db.Decimal(5, 2)
+  roofType              String?              @map("roof_type")
+  shadowFreeArea        Decimal?             @map("shadow_free_area") @db.Decimal(10, 2)
+
+  // Electrical
+  cableDistance          Decimal?            @map("cable_distance") @db.Decimal(10, 2)
+  electricityBoard      String?             @map("electricity_board")
+  meterType             String?             @map("meter_type")
+  sanctionedLoad        Decimal?            @map("sanctioned_load") @db.Decimal(10, 2)
+  existingPhase         String?             @map("existing_phase")
+
+  // Other
+  structureType         String?             @map("structure_type")
+  accessToRoof          String?             @map("access_to_roof")
+  observations          String?
+
+  // Approval
+  approvalStatus        SurveyApprovalStatus @default(PENDING) @map("approval_status")
+  approvalRemarks       String?              @map("approval_remarks")
+  approvedAt            DateTime?            @map("approved_at")
+
+  surveyDate            DateTime?            @map("survey_date")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  customer    Customer       @relation(fields: [customerId], references: [id])
+  lead        Lead?          @relation(fields: [leadId], references: [id])
+  createdBy   User           @relation("SurveyCreatedBy", fields: [createdById], references: [id])
+  approvedBy  User?          @relation("SurveyApprovedBy", fields: [approvedById], references: [id])
+  photos      SurveyPhoto[]
+
+  @@index([customerId])
+  @@index([leadId])
+  @@index([approvalStatus])
+  @@map("site_surveys")
+}
+
+model SurveyPhoto {
+  id          String    @id @default(uuid())
+  surveyId    String    @map("survey_id")
+  url         String
+  caption     String?
+  uploadedAt  DateTime  @default(now()) @map("uploaded_at")
+
+  survey SiteSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+  @@map("survey_photos")
+}
+
+// --- Solar Packages & Products ---
+
+model Product {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?
+  category        String
+  brand           String?
+  model           String?
+  specifications  Json?
+  unitPrice       Decimal  @map("unit_price") @db.Decimal(12, 2)
+  unit            String   @default("piece")
+  hsnCode         String?  @map("hsn_code")
+  gstRate         Decimal  @default(0) @map("gst_rate") @db.Decimal(5, 2)
+  warrantyMonths  Int?     @map("warranty_months")
+  warrantyEvent   WarrantyEventType @default(INSTALLATION_COMPLETE) @map("warranty_event")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  packageComponents PackageComponent[]
+  inventory         Inventory[]
+  serialNumbers     SerialNumber[]
+  quotationItems    QuotationItem[]
+  warranties        Warranty[]
+
+  @@index([category])
+  @@index([name])
+  @@map("products")
+}
+
+model SolarPackage {
+  id              String     @id @default(uuid())
+  name            String
+  description     String?
+  systemType      SystemType @map("system_type")
+  capacityKw      Decimal    @map("capacity_kw") @db.Decimal(10, 2)
+  basePrice       Decimal    @map("base_price") @db.Decimal(12, 2)
+  isActive        Boolean    @default(true) @map("is_active")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  components   PackageComponent[]
+  quotations   Quotation[]
+
+  @@unique([systemType, capacityKw])
+  @@index([systemType])
+  @@map("solar_packages")
+}
+
+model PackageComponent {
+  id          String  @id @default(uuid())
+  packageId   String  @map("package_id")
+  productId   String  @map("product_id")
+  quantity    Int
+  isOptional  Boolean @default(false) @map("is_optional")
+
+  // Relations
+  package SolarPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  product Product      @relation(fields: [productId], references: [id])
+
+  @@unique([packageId, productId])
+  @@map("package_components")
+}
+
+// --- Quotations ---
+
+model Quotation {
+  id                String          @id @default(uuid())
+  quotationNumber   String          @unique @map("quotation_number")
+  customerId        String          @map("customer_id")
+  leadId            String?         @map("lead_id")
+  packageId         String?         @map("package_id")
+  createdById       String          @map("created_by_id")
+  approvedById      String?         @map("approved_by_id")
+
+  // Pricing
+  subtotal          Decimal         @db.Decimal(14, 2)
+  discountPercent   Decimal         @default(0) @map("discount_percent") @db.Decimal(5, 2)
+  discountAmount    Decimal         @default(0) @map("discount_amount") @db.Decimal(14, 2)
+  taxableAmount     Decimal         @map("taxable_amount") @db.Decimal(14, 2)
+  cgst              Decimal         @default(0) @db.Decimal(14, 2)
+  sgst              Decimal         @default(0) @db.Decimal(14, 2)
+  igst              Decimal         @default(0) @db.Decimal(14, 2)
+  totalAmount       Decimal         @map("total_amount") @db.Decimal(14, 2)
+  estimatedSubsidy  Decimal?        @map("estimated_subsidy") @db.Decimal(14, 2)
+
+  // Status
+  status            QuotationStatus @default(DRAFT)
+  validUntil        DateTime?       @map("valid_until")
+  approvalRemarks   String?         @map("approval_remarks")
+  approvedAt        DateTime?       @map("approved_at")
+  pdfUrl            String?         @map("pdf_url")
+
+  notes             String?
+  termsAndConditions String?        @map("terms_and_conditions")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  customer   Customer       @relation(fields: [customerId], references: [id])
+  lead       Lead?          @relation(fields: [leadId], references: [id])
+  package    SolarPackage?  @relation(fields: [packageId], references: [id])
+  createdBy  User           @relation("QuotationCreatedBy", fields: [createdById], references: [id])
+  approvedBy User?          @relation("QuotationApprovedBy", fields: [approvedById], references: [id])
+  items      QuotationItem[]
+  orders     Order[]
+
+  @@index([customerId])
+  @@index([status])
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id            String   @id @default(uuid())
+  quotationId   String   @map("quotation_id")
+  productId     String?  @map("product_id")
+  description   String
+  quantity      Int
+  unitPrice     Decimal  @map("unit_price") @db.Decimal(12, 2)
+  gstRate       Decimal  @default(0) @map("gst_rate") @db.Decimal(5, 2)
+  totalPrice    Decimal  @map("total_price") @db.Decimal(14, 2)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product   Product?  @relation(fields: [productId], references: [id])
+
+  @@index([quotationId])
+  @@map("quotation_items")
+}
+
+// --- Orders ---
+
+model Order {
+  id              String      @id @default(uuid())
+  orderNumber     String      @unique @map("order_number")
+  customerId      String      @map("customer_id")
+  quotationId     String      @map("quotation_id")
+  status          OrderStatus @default(PENDING)
+  totalAmount     Decimal     @map("total_amount") @db.Decimal(14, 2)
+  paidAmount      Decimal     @default(0) @map("paid_amount") @db.Decimal(14, 2)
+  balanceAmount   Decimal     @map("balance_amount") @db.Decimal(14, 2)
+  notes           String?
+  confirmedAt     DateTime?   @map("confirmed_at")
+  completedAt     DateTime?   @map("completed_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  customer      Customer       @relation(fields: [customerId], references: [id])
+  quotation     Quotation      @relation(fields: [quotationId], references: [id])
+  installations Installation[]
+  payments      Payment[]
+  invoices      Invoice[]
+
+  @@index([customerId])
+  @@index([status])
+  @@map("orders")
+}
+
+// --- Supplier & Inventory ---
+
+model Supplier {
+  id            String   @id @default(uuid())
+  name          String
+  contactPerson String?  @map("contact_person")
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  gstNumber     String?  @map("gst_number")
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  inventory     Inventory[]
+  stockMovements StockMovement[]
+  expenses      Expense[]
+
+  @@index([name])
+  @@map("suppliers")
+}
+
+model Inventory {
+  id              String   @id @default(uuid())
+  productId       String   @map("product_id")
+  supplierId      String?  @map("supplier_id")
+  warehouse       String   @default("MAIN")
+  currentStock    Int      @default(0) @map("current_stock")
+  reservedStock   Int      @default(0) @map("reserved_stock")
+  minimumStock    Int      @default(0) @map("minimum_stock")
+  reorderLevel    Int      @default(0) @map("reorder_level")
+  unitCost        Decimal? @map("unit_cost") @db.Decimal(12, 2)
+  lastRestocked   DateTime? @map("last_restocked")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  product   Product   @relation(fields: [productId], references: [id])
+  supplier  Supplier? @relation(fields: [supplierId], references: [id])
+
+  @@unique([productId, warehouse])
+  @@index([productId])
+  @@index([warehouse])
+  @@map("inventory")
+}
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  productId     String            @map("product_id")
+  supplierId    String?           @map("supplier_id")
+  movementType  StockMovementType @map("movement_type")
+  quantity      Int
+  warehouse     String            @default("MAIN")
+  referenceId   String?           @map("reference_id")
+  referenceType String?           @map("reference_type")
+  remarks       String?
+  batchNumber   String?           @map("batch_number")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  supplier Supplier? @relation(fields: [supplierId], references: [id])
+
+  @@index([productId])
+  @@index([movementType])
+  @@index([createdAt])
+  @@map("stock_movements")
+}
+
+model SerialNumber {
+  id                  String    @id @default(uuid())
+  productId           String    @map("product_id")
+  serialNumber        String    @unique @map("serial_number")
+  batchNumber         String?   @map("batch_number")
+  status              String    @default("IN_STOCK")
+  warehouse           String    @default("MAIN")
+  installationId      String?   @map("installation_id")
+  purchaseDate        DateTime? @map("purchase_date")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  product      Product       @relation(fields: [productId], references: [id])
+  installation Installation? @relation(fields: [installationId], references: [id])
+  warranty     Warranty?
+  installationEquipment InstallationEquipment?
+
+  @@index([productId])
+  @@index([serialNumber])
+  @@index([status])
+  @@map("serial_numbers")
+}
+
+// --- Installation ---
+
+model Installation {
+  id                  String             @id @default(uuid())
+  installationNumber  String             @unique @map("installation_number")
+  customerId          String             @map("customer_id")
+  orderId             String             @map("order_id")
+  createdById         String             @map("created_by_id")
+  
+  // Schedule
+  scheduledDate       DateTime?          @map("scheduled_date")
+  startDate           DateTime?          @map("start_date")
+  completionDate      DateTime?          @map("completion_date")
+  
+  // Details
+  status              InstallationStatus @default(SCHEDULED)
+  systemType          SystemType?        @map("system_type")
+  capacityKw          Decimal?           @map("capacity_kw") @db.Decimal(10, 2)
+  address             String?
+  
+  // Sign-off
+  customerSignOff     Boolean            @default(false) @map("customer_sign_off")
+  signOffDate         DateTime?          @map("sign_off_date")
+  completionReportUrl String?            @map("completion_report_url")
+  
+  remarks             String?
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  customer              Customer               @relation(fields: [customerId], references: [id])
+  order                 Order                  @relation(fields: [orderId], references: [id])
+  createdBy             User                   @relation("InstallationCreatedBy", fields: [createdById], references: [id])
+  technicianAssignments TechnicianAssignment[]
+  photos                InstallationPhoto[]
+  equipment             InstallationEquipment[]
+  serialNumbers         SerialNumber[]
+  solarReadings         SolarReading[]
+  anomalyAlerts         AnomalyAlert[]
+  warranties            Warranty[]
+
+  @@index([customerId])
+  @@index([orderId])
+  @@index([status])
+  @@map("installations")
+}
+
+model InstallationPhoto {
+  id              String   @id @default(uuid())
+  installationId  String   @map("installation_id")
+  url             String
+  caption         String?
+  phase           String?
+  uploadedAt      DateTime @default(now()) @map("uploaded_at")
+
+  installation Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@index([installationId])
+  @@map("installation_photos")
+}
+
+model InstallationEquipment {
+  id              String @id @default(uuid())
+  installationId  String @map("installation_id")
+  serialNumberId  String @unique @map("serial_number_id")
+  installedAt     DateTime @default(now()) @map("installed_at")
+  remarks         String?
+
+  installation Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  serialNumber SerialNumber @relation(fields: [serialNumberId], references: [id])
+
+  @@index([installationId])
+  @@map("installation_equipment")
+}
+
+model TechnicianAssignment {
+  id              String    @id @default(uuid())
+  installationId  String?   @map("installation_id")
+  serviceTicketId String?   @map("service_ticket_id")
+  technicianId    String    @map("technician_id")
+  assignedAt      DateTime  @default(now()) @map("assigned_at")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  hoursWorked     Decimal?  @map("hours_worked") @db.Decimal(6, 2)
+  labourRate      Decimal?  @map("labour_rate") @db.Decimal(10, 2)
+  labourCost      Decimal?  @map("labour_cost") @db.Decimal(12, 2)
+  remarks         String?
+
+  // Relations
+  installation  Installation?  @relation(fields: [installationId], references: [id])
+  serviceTicket ServiceTicket? @relation(fields: [serviceTicketId], references: [id])
+  technician    User           @relation(fields: [technicianId], references: [id])
+
+  @@index([technicianId])
+  @@index([installationId])
+  @@index([serviceTicketId])
+  @@map("technician_assignments")
+}
+
+// --- Warranty ---
+
+model Warranty {
+  id                String           @id @default(uuid())
+  customerId        String           @map("customer_id")
+  productId         String           @map("product_id")
+  serialNumberId    String           @unique @map("serial_number_id")
+  installationId    String?          @map("installation_id")
+  warrantyMonths    Int              @map("warranty_months")
+  warrantyEvent     WarrantyEventType @map("warranty_event")
+  startDate         DateTime         @map("start_date")
+  expiryDate        DateTime         @map("expiry_date")
+  isActive          Boolean          @default(true) @map("is_active")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+
+  // Relations
+  customer     Customer          @relation(fields: [customerId], references: [id])
+  product      Product           @relation(fields: [productId], references: [id])
+  serialNumber SerialNumber      @relation(fields: [serialNumberId], references: [id])
+  installation Installation?     @relation(fields: [installationId], references: [id])
+  claims       WarrantyClaim[]
+
+  @@index([customerId])
+  @@index([serialNumberId])
+  @@index([expiryDate])
+  @@map("warranties")
+}
+
+model WarrantyClaim {
+  id                    String              @id @default(uuid())
+  warrantyId            String              @map("warranty_id")
+  claimNumber           String              @unique @map("claim_number")
+  issueDescription      String              @map("issue_description")
+  status                WarrantyClaimStatus @default(SUBMITTED)
+  resolutionDescription String?             @map("resolution_description")
+  replacementSerialId   String?             @map("replacement_serial_id")
+  claimDate             DateTime            @default(now()) @map("claim_date")
+  resolvedAt            DateTime?           @map("resolved_at")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  warranty Warranty @relation(fields: [warrantyId], references: [id])
+
+  @@index([warrantyId])
+  @@index([status])
+  @@map("warranty_claims")
+}
+
+// --- Service Tickets ---
+
+model ServiceTicket {
+  id                  String         @id @default(uuid())
+  ticketNumber        String         @unique @map("ticket_number")
+  customerId          String         @map("customer_id")
+  installationId      String?        @map("installation_id")
+  createdById         String         @map("created_by_id")
+  assignedToId        String?        @map("assigned_to_id")
+  anomalyAlertId      String?        @unique @map("anomaly_alert_id")
+
+  // Details
+  subject             String
+  description         String
+  priority            TicketPriority @default(MEDIUM)
+  status              TicketStatus   @default(OPEN)
+  category            String?
+
+  // Resolution
+  repairDetails       String?        @map("repair_details")
+  labourCharges       Decimal?       @map("labour_charges") @db.Decimal(12, 2)
+  sparePartCharges    Decimal?       @map("spare_part_charges") @db.Decimal(12, 2)
+  totalCharges        Decimal?       @map("total_charges") @db.Decimal(12, 2)
+  isUnderWarranty     Boolean        @default(false) @map("is_under_warranty")
+  customerConfirmation Boolean       @default(false) @map("customer_confirmation")
+
+  resolvedAt          DateTime?      @map("resolved_at")
+  closedAt            DateTime?      @map("closed_at")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  // Relations
+  customer              Customer               @relation(fields: [customerId], references: [id])
+  createdBy             User                   @relation("TicketCreatedBy", fields: [createdById], references: [id])
+  assignedTo            User?                  @relation("TicketAssignedTo", fields: [assignedToId], references: [id])
+  anomalyAlert          AnomalyAlert?          @relation(fields: [anomalyAlertId], references: [id])
+  technicianAssignments TechnicianAssignment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([priority])
+  @@map("service_tickets")
+}
+
+// --- Financial ---
+
+model Payment {
+  id              String        @id @default(uuid())
+  paymentNumber   String        @unique @map("payment_number")
+  customerId      String        @map("customer_id")
+  orderId         String?       @map("order_id")
+  invoiceId       String?       @map("invoice_id")
+  recordedById    String        @map("recorded_by_id")
+
+  amount          Decimal       @db.Decimal(14, 2)
+  paymentType     PaymentType   @map("payment_type")
+  paymentMethod   PaymentMethod @map("payment_method")
+  status          PaymentStatus @default(PENDING)
+  transactionRef  String?       @map("transaction_ref")
+  paymentDate     DateTime      @map("payment_date")
+  remarks         String?
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  customer   Customer @relation(fields: [customerId], references: [id])
+  order      Order?   @relation(fields: [orderId], references: [id])
+  invoice    Invoice? @relation(fields: [invoiceId], references: [id])
+  recordedBy User     @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([customerId])
+  @@index([orderId])
+  @@index([paymentDate])
+  @@map("payments")
+}
+
+model Invoice {
+  id              String        @id @default(uuid())
+  invoiceNumber   String        @unique @map("invoice_number")
+  orderId         String        @map("order_id")
+  subtotal        Decimal       @db.Decimal(14, 2)
+  taxAmount       Decimal       @map("tax_amount") @db.Decimal(14, 2)
+  totalAmount     Decimal       @map("total_amount") @db.Decimal(14, 2)
+  paidAmount      Decimal       @default(0) @map("paid_amount") @db.Decimal(14, 2)
+  status          InvoiceStatus @default(DRAFT)
+  dueDate         DateTime?     @map("due_date")
+  pdfUrl          String?       @map("pdf_url")
+  issuedAt        DateTime?     @map("issued_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  order    Order     @relation(fields: [orderId], references: [id])
+  payments Payment[]
+
+  @@index([orderId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Expense {
+  id            String          @id @default(uuid())
+  category      ExpenseCategory
+  amount        Decimal         @db.Decimal(14, 2)
+  description   String
+  supplierId    String?         @map("supplier_id")
+  referenceId   String?         @map("reference_id")
+  referenceType String?         @map("reference_type")
+  expenseDate   DateTime        @map("expense_date")
+  createdById   String          @map("created_by_id")
+  receiptUrl    String?         @map("receipt_url")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  supplier  Supplier? @relation(fields: [supplierId], references: [id])
+  createdBy User      @relation(fields: [createdById], references: [id])
+
+  @@index([category])
+  @@index([expenseDate])
+  @@map("expenses")
+}
+
+// --- Government Subsidy ---
+
+model SubsidyApplication {
+  id                    String        @id @default(uuid())
+  customerId            String        @map("customer_id")
+  createdById           String        @map("created_by_id")
+  applicationNumber     String?       @unique @map("application_number")
+  referenceNumber       String?       @map("reference_number")
+  status                SubsidyStatus @default(DRAFT)
+  systemCapacityKw      Decimal       @map("system_capacity_kw") @db.Decimal(10, 2)
+  estimatedSubsidy      Decimal?      @map("estimated_subsidy") @db.Decimal(14, 2)
+  approvedAmount        Decimal?      @map("approved_amount") @db.Decimal(14, 2)
+  receivedAmount        Decimal?      @map("received_amount") @db.Decimal(14, 2)
+  documentsUrl          Json?         @map("documents_url")
+  verificationStatus    String?       @map("verification_status")
+  rejectionReason       String?       @map("rejection_reason")
+  submittedAt           DateTime?     @map("submitted_at")
+  approvedAt            DateTime?     @map("approved_at")
+  paymentReceivedAt     DateTime?     @map("payment_received_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  customer  Customer @relation(fields: [customerId], references: [id])
+  createdBy User     @relation("SubsidyCreatedBy", fields: [createdById], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@map("subsidy_applications")
+}
+
+// --- Solar Intelligence / AI ---
+
+model SolarReading {
+  id              String        @id @default(uuid())
+  installationId  String        @map("installation_id")
+  readingDate     DateTime      @map("reading_date")
+  energyGenerated Decimal?      @map("energy_generated") @db.Decimal(10, 2)
+  voltage         Decimal?      @db.Decimal(8, 2)
+  current         Decimal?      @db.Decimal(8, 2)
+  power           Decimal?      @db.Decimal(10, 2)
+  inverterTemp    Decimal?      @map("inverter_temp") @db.Decimal(6, 2)
+  ambientTemp     Decimal?      @map("ambient_temp") @db.Decimal(6, 2)
+  irradiance      Decimal?      @db.Decimal(8, 2)
+  systemStatus    String?       @map("system_status")
+  source          ReadingSource @default(SIMULATED)
+  metadata        Json?
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  installation Installation @relation(fields: [installationId], references: [id])
+
+  @@index([installationId])
+  @@index([readingDate])
+  @@index([source])
+  @@map("solar_readings")
+}
+
+model AnomalyAlert {
+  id              String        @id @default(uuid())
+  installationId  String        @map("installation_id")
+  readingId       String?       @map("reading_id")
+  alertType       String        @map("alert_type")
+  severity        AlertSeverity
+  anomalyScore    Decimal?      @map("anomaly_score") @db.Decimal(5, 4)
+  description     String
+  explanation     String?
+  detectedValues  Json?         @map("detected_values")
+  isResolved      Boolean       @default(false) @map("is_resolved")
+  resolvedAt      DateTime?     @map("resolved_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  installation  Installation   @relation(fields: [installationId], references: [id])
+  serviceTicket ServiceTicket?
+
+  @@index([installationId])
+  @@index([severity])
+  @@index([isResolved])
+  @@map("anomaly_alerts")
+}
+
+// --- Notifications & Audit ---
+
+model Notification {
+  id          String           @id @default(uuid())
+  userId      String           @map("user_id")
+  type        NotificationType @default(INFO)
+  title       String
+  message     String
+  isRead      Boolean          @default(false) @map("is_read")
+  referenceId String?          @map("reference_id")
+  referenceType String?        @map("reference_type")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?  @map("user_id")
+  action        String
+  entity        String
+  entityId      String?  @map("entity_id")
+  oldValues     Json?    @map("old_values")
+  newValues     Json?    @map("new_values")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
