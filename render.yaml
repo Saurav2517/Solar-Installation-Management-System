@@ -1,0 +1,25 @@
+# Render Blueprint for SunPower Solar Management.
+# One Node web service: builds the Vite client into dist/ and runs the Express
+# API, which also serves those static files (see server/index.ts).
+services:
+  - type: web
+    name: sunpower-solar
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      # Free instances have an ephemeral filesystem, so data/db.json is
+      # reseeded on every deploy. To keep real data, switch to a paid instance,
+      # uncomment the disk block below and set DATA_DIR to its mount path.
+      # - key: DATA_DIR
+      #   value: /var/data
+    # disk:
+    #   name: sunpower-data
+    #   mountPath: /var/data
+    #   sizeGB: 1

@@ -17,6 +17,7 @@ import {
 import { api, useApi } from '../lib/api';
 import { fmtDate, inr, inrCompact } from '../lib/format';
 import type { TechniciansData } from '../lib/types';
+import { phoneError } from '../../shared/validation';
 
 export default function Technicians() {
   const toast = useToast();
@@ -39,6 +40,13 @@ export default function Technicians() {
   };
 
   const add = async () => {
+    if (form.phone) {
+      const phoneErr = phoneError(form.phone);
+      if (phoneErr) {
+        toast(phoneErr, 'error');
+        return;
+      }
+    }
     setBusy('new');
     try {
       await api.post('/technicians', { ...form, hourlyRate: Number(form.hourlyRate) });
@@ -190,7 +198,14 @@ export default function Technicians() {
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
           <Field label="Phone">
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <Input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              placeholder="10-digit number"
+              inputMode="numeric"
+              maxLength={10}
+              pattern="\d{10}"
+            />
           </Field>
           <Field label="Role">
             <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>

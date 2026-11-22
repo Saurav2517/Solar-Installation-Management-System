@@ -4,7 +4,10 @@ import { seed } from './seed';
 import { demoAccounts } from './auth';
 import type { DB } from '../shared/types';
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
+/** Set DATA_DIR to keep the JSON store on a mounted volume (e.g. a Render disk). */
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.resolve(process.cwd(), 'data');
 const FILE = path.join(DATA_DIR, 'db.json');
 
 let db: DB | null = null;

@@ -31,6 +31,7 @@ export default function Billing() {
   const [tab, setTab] = useState(params.get('tab') ?? 'invoices');
   const [busy, setBusy] = useState<string | null>(null);
   const [expenseOpen, setExpenseOpen] = useState(false);
+  const [proofView, setProofView] = useState<{ ref: string; proof?: string; amount: number } | null>(null);
   const [expense, setExpense] = useState({
     category: 'other' as ExpenseCategory,
     description: '',
@@ -262,6 +263,8 @@ export default function Billing() {
                   <th>Type</th>
                   <th>Method</th>
                   <th className="text-right">Amount</th>
+                  <th>Status</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -271,8 +274,55 @@ export default function Billing() {
                     <td className="whitespace-nowrap text-[11px]">{fmtDate(p.receivedAt)}</td>
                     <td className="text-[11px]">{p.customerName ?? p.customerId}</td>
                     <td className="text-[11px] capitalize">{p.kind}</td>
-                    <td className="text-[11px] uppercase">{p.method}</td>
+                    <td className="text-[11px] uppercase">
+                      {p.method}
+                      {p.reference && (
+                        <span className="block font-mono text-[9px] normal-case text-slate-400">{p.reference}</span>
+                      )}
+                    </td>
                     <td className="mono text-right text-xs font-semibold text-emerald-700">{inr(p.amount)}</td>
+                    <td>
+                      {p.status === 'pending' ? (
+                        <Badge tone="amber">Pending</Badge>
+                      ) : p.status === 'rejected' ? (
+                        <Badge tone="red">Rejected</Badge>
+                      ) : (
+                        <Badge tone="green">Verified</Badge>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap text-right">
+                      {p.status === 'pending' && (
+                        <>
+                          {p.proof && (
+                            <Btn
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setProofView({ ref: p.ref, proof: p.proof, amount: p.amount })}
+                            >
+                              Screenshot
+                            </Btn>
+                          )}
+                          <Btn
+                            variant="accent"
+                            size="sm"
+                            className="ml-1"
+                            disabled={busy === p.id}
+                            onClick={() => void run(() => api.post(`/payments/${p.id}/verify`, { approved: true }), `${p.ref} verified`, p.id)}
+                          >
+                            Verify
+                          </Btn>
+                          <Btn
+                            variant="ghost"
+                            size="sm"
+                            className="ml-1"
+                            disabled={busy === p.id}
+                            onClick={() => void run(() => api.post(`/payments/${p.id}/verify`, { approved: false }), `${p.ref} rejected`, p.id)}
+                          >
+                            Reject
+                          </Btn>
+                        </>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -282,6 +332,20 @@ export default function Billing() {
 
         {data.invoices.length === 0 && tab === 'invoices' && <Empty title="No invoices yet" hint="Confirm an order and its invoice is created automatically." />}
       </Card>
+
+      <Modal
+        open={!!proofView}
+        onClose={() => setProofView(null)}
+        title={`Payment screenshot · ${proofView?.ref ?? ''}`}
+        subtitle={`Customer submitted ${inr(proofView?.amount ?? 0)} by UPI — check it against the bank credit before verifying.`}
+        footer={<Btn variant="ghost" onClick={() => setProofView(null)}>Close</Btn>}
+      >
+        {proofView?.proof ? (
+          <img src={proofView.proof} alt="UPI payment screenshot" className="mx-auto max-h-[70vh] w-auto rounded-lg border border-slate-200" />
+        ) : (
+          <p className="text-xs text-slate-500">No screenshot was attached.</p>
+        )}
+      </Modal>
 
       <Modal
         open={expenseOpen}

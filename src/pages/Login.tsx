@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { Btn, Field, Input } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import type { AccountRole } from '../../shared/types';
@@ -60,6 +61,9 @@ export default function Login() {
 
   return (
     <div className="grid min-h-screen bg-slate-100 lg:grid-cols-2">
+      <div className="fixed right-4 top-4 z-20">
+        <ThemeToggle />
+      </div>
       <div className="hidden flex-col justify-between bg-slate-900 p-10 text-slate-300 lg:flex">
         <div className="flex items-center gap-2.5">
           <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500 text-slate-950">

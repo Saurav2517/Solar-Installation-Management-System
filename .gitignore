@@ -3,3 +3,6 @@ dist
 data/db.json
 .DS_Store
 *.log
+artifacts
+vite.preview.config.ts
+public/payment-qr.png

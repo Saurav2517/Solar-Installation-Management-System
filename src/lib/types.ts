@@ -213,6 +213,47 @@ export interface TicketDetailData {
   products: Product[];
 }
 
+export interface PortalTicket {
+  id: string;
+  ref: string;
+  orderId?: string;
+  serialId?: string;
+  serialNo?: string;
+  productId?: string;
+  productName?: string;
+  faultCode?: string;
+  description: string;
+  priority: Ticket['priority'];
+  status: Ticket['status'];
+  reportedAt: string;
+  assignedTo?: string;
+  warrantyStatus: Ticket['warrantyStatus'];
+  warrantyEnd?: string;
+  diagnosis?: string;
+  resolution?: string;
+  resolvedAt?: string;
+  confirmedAt?: string;
+  slaDueAt: string;
+}
+
+export interface PortalSerial {
+  id: string;
+  serialNo: string;
+  productId: string;
+  productName: string;
+  category?: string;
+  orderId?: string;
+  orderRef?: string;
+  status: SerialUnit['status'];
+  warrantyEnd?: string;
+  inWarranty: boolean;
+}
+
+export interface PortalTicketsData {
+  tickets: PortalTicket[];
+  serials: PortalSerial[];
+}
+
 export interface BillingData {
   invoices: Array<Invoice & { due: number }>;
   subsidies: Array<Subsidy & { docsReceived: number; docsTotal: number; orderRef?: string }>;
@@ -346,9 +387,42 @@ export interface CustomerOrder {
   subsidyAmount?: number;
 }
 
+export interface PendingPayment {
+  ref: string;
+  amount: number;
+  kind: 'advance' | 'balance';
+  submittedAt: string;
+  proof?: string;
+}
+
+export interface CustomerPaymentRow {
+  ref: string;
+  amount: number;
+  method: string;
+  kind: string;
+  reference?: string;
+  receivedAt: string;
+  status: 'pending' | 'verified' | 'rejected';
+  reviewNote?: string;
+}
+
+export interface PaymentReceipt {
+  ref: string;
+  amount: number;
+  orderRef: string;
+  kind: 'advance' | 'balance';
+}
+
 export interface CustomerOrderView {
   order: CustomerOrder;
   steps: Array<{ key: string; label: string; done: boolean }>;
+  payable: boolean;
+  payKind: 'advance' | 'balance' | null;
+  advanceRate: number;
+  advanceTarget: number;
+  advanceOutstanding: number;
+  pendingPayment?: PendingPayment;
+  payments: CustomerPaymentRow[];
   invoice?: {
     number: string;
     amount: number;

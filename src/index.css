@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: toggled by adding `.dark` to <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
@@ -73,6 +76,102 @@
     @apply text-xs text-slate-500;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Dark theme                                                         */
+/* Utility overrides flip the neutral palette used across every page;  */
+/* brand colours (amber/emerald/rose) are left as accents.             */
+/* ------------------------------------------------------------------ */
+
+.dark body {
+  background-color: #0b1220;
+  color: #e2e8f0;
+}
+
+/* surfaces */
+.dark .bg-white { background-color: #0f172a; }
+.dark .bg-white\/90 { background-color: rgba(15, 23, 42, 0.9); }
+.dark .bg-white\/80 { background-color: rgba(15, 23, 42, 0.8); }
+.dark .bg-slate-50 { background-color: #111c2e; }
+.dark .bg-slate-50\/70 { background-color: rgba(17, 28, 46, 0.7); }
+.dark .bg-slate-100 { background-color: #0b1220; }
+.dark .bg-slate-200 { background-color: #1e293b; }
+.dark .bg-slate-300 { background-color: #334155; }
+
+/* text */
+.dark .text-slate-900 { color: #f8fafc; }
+.dark .text-slate-800 { color: #f1f5f9; }
+.dark .text-slate-700 { color: #e2e8f0; }
+.dark .text-slate-600 { color: #cbd5e1; }
+.dark .text-slate-500 { color: #94a3b8; }
+.dark .text-slate-400 { color: #94a3b8; }
+.dark .text-slate-300 { color: #cbd5e1; }
+.dark .text-slate-100 { color: #f1f5f9; }
+
+/* tinted chips / callouts */
+.dark .bg-amber-50,
+.dark .bg-amber-50\/50 { background-color: rgba(245, 158, 11, 0.12); }
+.dark .bg-amber-100 { background-color: rgba(245, 158, 11, 0.18); }
+.dark .bg-emerald-50,
+.dark .bg-emerald-50\/40 { background-color: rgba(16, 185, 129, 0.12); }
+.dark .bg-emerald-100 { background-color: rgba(16, 185, 129, 0.18); }
+.dark .bg-rose-50 { background-color: rgba(244, 63, 94, 0.12); }
+.dark .bg-violet-50 { background-color: rgba(139, 92, 246, 0.12); }
+.dark .bg-violet-100 { background-color: rgba(139, 92, 246, 0.18); }
+.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.12); }
+.dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.12); }
+
+/* tinted text on those chips */
+.dark .text-amber-700,
+.dark .text-amber-800,
+.dark .text-amber-900 { color: #fcd34d; }
+.dark .text-emerald-700,
+.dark .text-emerald-800 { color: #6ee7b7; }
+.dark .text-rose-700,
+.dark .text-rose-800 { color: #fda4af; }
+.dark .text-violet-700 { color: #c4b5fd; }
+.dark .text-blue-700 { color: #93c5fd; }
+.dark .text-orange-700 { color: #fdba74; }
+
+/* borders / dividers */
+.dark .border-slate-100,
+.dark .border-slate-200 { border-color: #1e293b; }
+.dark .border-slate-300 { border-color: #334155; }
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1e293b; }
+.dark .ring-slate-200 { --tw-ring-color: #334155; }
+
+/* hover states */
+.dark .hover\:bg-slate-50:hover { background-color: #16233a; }
+.dark .hover\:bg-slate-100:hover { background-color: #1e293b; }
+.dark .hover\:text-slate-900:hover,
+.dark .hover\:text-slate-800:hover,
+.dark .hover\:text-slate-700:hover { color: #f8fafc; }
+.dark .hover\:text-slate-300:hover,
+.dark .hover\:text-slate-100:hover { color: #e2e8f0; }
+
+/* shared component classes (their @apply values are inlined) */
+.dark .card { background-color: #0f172a; border-color: #1e293b; }
+.dark .label { color: #94a3b8; }
+.dark .input {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+.dark .input::placeholder { color: #64748b; }
+.dark .btn-primary { background-color: #e2e8f0; color: #0f172a; }
+.dark .btn-primary:hover { background-color: #cbd5e1; }
+.dark .btn-ghost { background-color: #0f172a; border-color: #334155; color: #e2e8f0; }
+.dark .btn-ghost:hover { background-color: #1e293b; }
+.dark .tbl thead th {
+  background-color: #111c2e;
+  border-color: #1e293b;
+  color: #94a3b8;
+}
+.dark .tbl tbody td { border-color: #1e293b; color: #cbd5e1; }
+.dark .tbl tbody tr:hover { background-color: #16233a; }
+.dark .link { color: #f8fafc; }
+.dark .section-title { color: #f8fafc; }
+.dark .hint { color: #94a3b8; }
 
 @media print {
   body {

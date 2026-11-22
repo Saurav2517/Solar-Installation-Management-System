@@ -13,8 +13,9 @@ export default function PortalOrderDetail() {
   if (error) return <ErrorState message={error} onRetry={() => void reload()} />;
   if (!data) return null;
 
-  const { order, invoice, subsidy, installation, steps } = data;
+  const { order, invoice, subsidy, installation, steps, payments, payable, payKind } = data;
   const balance = Math.max(0, order.total - order.paidAmount);
+  const payLabel = payKind === 'advance' ? `Pay ${inr(data.advanceOutstanding)} advance` : `Pay ${inr(balance)}`;
 
   return (
     <>
@@ -23,16 +24,38 @@ export default function PortalOrderDetail() {
         subtitle={`${capacityText(order.capacityKw, order.systemType)} · placed ${fmtDate(order.createdAt)}`}
         backTo="/portal/orders"
         backLabel="My orders"
-        actions={<StatusBadge kind="order" status={order.status} />}
+        actions={
+          <>
+            {payable && (
+              <Link to={`/portal/orders/${order.id}/pay`} className="btn btn-accent btn-sm">
+                <Icon name="money" className="h-3.5 w-3.5" />
+                {payLabel}
+              </Link>
+            )}
+            <StatusBadge kind="order" status={order.status} />
+          </>
+        }
       />
 
       {order.status === 'requested' && (
         <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
           <Icon name="inbox" className="mt-0.5 h-4 w-4 shrink-0" />
-          <p>
-            Your request is with the SunPower team. They will confirm stock, the install date and the advance — you will
-            see the status change here.
-          </p>
+          {payable ? (
+            <p>
+              Pay the 20% advance of <strong>{inr(data.advanceOutstanding)}</strong> to confirm this order. SunPower then
+              checks stock and books the install date — the balance is due after installation.
+            </p>
+          ) : data.pendingPayment ? (
+            <p>
+              Your screenshot for {inr(data.pendingPayment.amount)} is with the office for verification. The advance is
+              posted to this order once it is checked — usually within a working day.
+            </p>
+          ) : (
+            <p>
+              Advance of {inr(order.paidAmount)} received. The SunPower team is confirming stock and the install date —
+              you will see the status change here.
+            </p>
+          )}
         </div>
       )}
 
@@ -173,11 +196,63 @@ export default function PortalOrderDetail() {
           )}
 
           <Card>
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="section-title">Payments</h2>
+              <p className="mt-0.5 text-xs text-slate-500">Everything received against this order.</p>
+            </div>
+            <div className="px-5 py-4">
+              {payments.length === 0 ? (
+                <p className="text-xs text-slate-500">No payments recorded yet.</p>
+              ) : (
+                <ul className="space-y-2 text-xs">
+                  {payments.map((p) => (
+                    <li key={p.ref} className="flex items-start justify-between gap-2">
+                      <span>
+                        <span className="font-mono text-[10px] text-slate-400">{p.ref}</span>
+                        <span className="block text-slate-500">
+                          {fmtDate(p.receivedAt)} · {p.method.toUpperCase()}
+                        </span>
+                        {p.status === 'pending' && (
+                          <span className="mt-0.5 block text-[10px] font-semibold text-amber-700">Pending verification</span>
+                        )}
+                        {p.status === 'rejected' && (
+                          <span className="mt-0.5 block text-[10px] font-semibold text-rose-600">Rejected — upload again</span>
+                        )}
+                      </span>
+                      <span
+                        className={`mono font-semibold ${p.status === 'verified' ? 'text-emerald-700' : 'text-slate-500'}`}
+                      >
+                        {inr(p.amount)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {payable && (
+                <Link to={`/portal/orders/${order.id}/pay`} className="btn btn-accent btn-sm mt-3 w-full justify-center">
+                  <Icon name="money" className="h-3.5 w-3.5" />
+                  {payKind === 'advance' ? `Pay ${inr(data.advanceOutstanding)} advance` : `Pay ${inr(balance)} by UPI`}
+                </Link>
+              )}
+              {data.pendingPayment && (
+                <Link to={`/portal/orders/${order.id}/pay`} className="btn btn-ghost btn-sm mt-3 w-full justify-center">
+                  <Icon name="clock" className="h-3.5 w-3.5" />
+                  Awaiting verification — {inr(data.pendingPayment.amount)}
+                </Link>
+              )}
+            </div>
+          </Card>
+
+          <Card>
             <div className="px-5 py-4">
               <h2 className="section-title">Need a hand?</h2>
               <p className="mt-1 text-xs text-slate-500">
                 Call +91 98450 10101 or reply to the confirmation email and the service desk will help.
               </p>
+              <Link to="/portal/service" className="btn btn-ghost btn-sm mt-3">
+                <Icon name="headset" className="h-3.5 w-3.5" />
+                Raise a service ticket
+              </Link>
               <Link to="/portal" className="btn btn-ghost btn-sm mt-3">
                 <Icon name="arrowRight" className="h-3.5 w-3.5" />
                 Back to the shop

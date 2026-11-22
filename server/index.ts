@@ -5,6 +5,7 @@ import { getDb, reloadDb, resetDb, saveDb } from './db';
 import * as L from './logic';
 import { ApiError } from './logic';
 import { buildBom, quoteTotals, subsidyFor } from '../shared/bom';
+import { phoneError } from '../shared/validation';
 import { accountForToken, createSession, destroySession, publicAccount, verifyPassword } from './auth';
 import type {
   Account,
@@ -495,6 +496,44 @@ app.post(
   }),
 );
 
+app.get(
+  '/api/portal/tickets',
+  wrap((req) => {
+    const db = getDb();
+    const customerId = currentCustomerId(req);
+    return {
+      tickets: L.customerTickets(db, customerId),
+      serials: L.customerSerials(db, customerId),
+    };
+  }),
+);
+
+app.post(
+  '/api/portal/tickets',
+  wrap((req) => {
+    const db = getDb();
+    const customerId = currentCustomerId(req);
+    const ticket = L.createCustomerTicket(db, customerId, req.body as {
+      serialNo?: string;
+      faultCode?: string;
+      description: string;
+      priority?: TicketPriority;
+    });
+    return { ticket: L.customerTicketView(db, ticket) };
+  }),
+);
+
+app.post(
+  '/api/portal/orders/:id/payment-proof',
+  wrap((req) => {
+    const db = getDb();
+    const customerId = currentCustomerId(req);
+    L.submitPaymentProof(db, customerId, req.params.id, req.body as { amount?: number; proof: string });
+    const order = db.orders.find((o) => o.id === req.params.id || o.ref === req.params.id)!;
+    return L.customerOrderView(db, order);
+  }),
+);
+
 app.post(
   '/api/orders/:id/payments',
   wrap((req) => {
@@ -765,6 +804,13 @@ app.post(
   wrap((req) => L.payInvoice(getDb(), req.params.id, req.body)),
 );
 
+app.post(
+  '/api/payments/:id/verify',
+  wrap((req) =>
+    L.verifyPayment(getDb(), req.params.id, req.body as { approved: boolean; note?: string; reviewedBy?: string }),
+  ),
+);
+
 app.patch(
   '/api/subsidies/:id',
   wrap((req) => L.updateSubsidy(getDb(), req.params.id, req.body)),
@@ -802,6 +848,10 @@ app.post(
       phone?: string;
     };
     if (!name?.trim()) throw new ApiError(400, 'Technician name is required');
+    if (phone) {
+      const phoneErr = phoneError(phone);
+      if (phoneErr) throw new ApiError(400, phoneErr);
+    }
     const tech = {
       id: `T${db.technicians.length + 1}`,
       name: name.trim(),

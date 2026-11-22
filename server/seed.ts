@@ -1076,6 +1076,164 @@ export function seed(): DB {
     }
   }
 
+  // ---- Bulk demo data (200+ customers / enquiries for richer lists) -------
+  const FIRST_NAMES = ['Amit','Priya','Rahul','Sneha','Vikram','Anjali','Karan','Meera','Arjun','Divya','Rohit','Neha','Suresh','Kavita','Manoj','Pooja','Deepak','Shweta','Rajesh','Nisha','Sanjay','Aisha','Vinod','Lakshmi','Ganesh','Sunita','Ashwin','Farhan','Prakash','Deepa','Ramesh','Anita','Harish','Kiran','Swati','Tarun','Pallavi','Nitin','Rekha','Yogesh'];
+  const LAST_NAMES = ['Sharma','Verma','Iyer','Reddy','Gowda','Patel','Kumar','Singh','Nair','Menon','Rao','Joshi','Kulkarni','Bhat','Ali','Desai','Hegde','Krishnan','Narayan','Shetty','Mehta','Agarwal','Chopra','Kapoor','Malhotra','Bose','Das','Ghosh','Saxena','Trivedi'];
+  const LOCALITIES: Array<{ city: string; pincode: string; area: string }> = [
+    { city: 'Bengaluru', pincode: '560001', area: 'MG Road' },
+    { city: 'Bengaluru', pincode: '560034', area: 'Koramangala' },
+    { city: 'Bengaluru', pincode: '560066', area: 'Whitefield' },
+    { city: 'Bengaluru', pincode: '560076', area: 'Electronic City' },
+    { city: 'Bengaluru', pincode: '560095', area: 'HSR Layout' },
+    { city: 'Bengaluru', pincode: '560038', area: 'Indiranagar' },
+    { city: 'Bengaluru', pincode: '560011', area: 'Jayanagar' },
+    { city: 'Bengaluru', pincode: '560040', area: 'Vijayanagar' },
+    { city: 'Bengaluru', pincode: '560080', area: 'Sadashivanagar' },
+    { city: 'Bengaluru', pincode: '560078', area: 'JP Nagar' },
+    { city: 'Bengaluru', pincode: '560058', area: 'Peenya' },
+    { city: 'Bengaluru', pincode: '560064', area: 'Yelahanka' },
+    { city: 'Bengaluru', pincode: '560043', area: 'HRBR Layout' },
+    { city: 'Bengaluru', pincode: '560060', area: 'Kengeri' },
+    { city: 'Bengaluru', pincode: '560070', area: 'Banashankari' },
+    { city: 'Bengaluru', pincode: '560102', area: 'HSR Layout Sector 2' },
+    { city: 'Bengaluru', pincode: '560103', area: 'Sarjapur Road' },
+    { city: 'Bengaluru', pincode: '560003', area: 'Malleshwaram' },
+    { city: 'Bengaluru', pincode: '560004', area: 'Basavanagudi' },
+    { city: 'Bengaluru', pincode: '560005', area: 'Frazer Town' },
+  ];
+  const BULK_STATUSES: EnquiryStatus[] = ['new', 'contacted', 'qualified', 'survey_scheduled', 'surveyed', 'survey_approved', 'quoted', 'lost'];
+  const SOURCES: EnquirySource[] = ['web', 'whatsapp', 'call', 'walk-in'];
+  const TYPES: SystemType[] = ['on-grid', 'on-grid', 'on-grid', 'off-grid', 'hardware'];
+  const KW: CapacityKw[] = [1, 2, 3, 3, 4, 5];
+
+  for (let i = 0; i < 200; i++) {
+    const fn = FIRST_NAMES[i % FIRST_NAMES.length];
+    const ln = LAST_NAMES[(i * 7 + 3) % LAST_NAMES.length];
+    const name = `${fn} ${ln}`;
+    const loc = LOCALITIES[i % LOCALITIES.length];
+    const phone = `+91 9${String(800000000 + i * 9173).slice(0, 9)}`;
+    const email = `${fn.toLowerCase()}.${ln.toLowerCase()}${i}@example.com`;
+    const address = `${(i % 90) + 1}, ${loc.area} ${['Main Road', 'Cross', 'Street', 'Layout', 'Phase 2'][i % 5]}`;
+    const kw = KW[i % KW.length];
+    const type = TYPES[i % TYPES.length];
+    const wantsSubsidy = type !== 'hardware' && i % 4 !== 0;
+    const bill = 1400 + (i * 317) % 9200;
+    const roof = 110 + (i * 41) % 620;
+    const source = SOURCES[i % SOURCES.length];
+    const createdDays = i % 90;
+    const createdAt = iso(createdDays, 9 + (i % 8), i % 60);
+    const status = BULK_STATUSES[i % BULK_STATUSES.length];
+
+    const customerId = next('customer', 'CUS');
+    customers.push({
+      id: customerId,
+      name,
+      phone,
+      email,
+      address,
+      city: loc.city,
+      pincode: loc.pincode,
+      createdAt,
+    });
+
+    const enquiry: Enquiry = {
+      id: next('enquiry', 'ENQ'),
+      ref: next('enquiryRef', 'ENQ'),
+      customerId,
+      customerName: name,
+      phone,
+      email,
+      address,
+      city: loc.city,
+      pincode: loc.pincode,
+      requestedKw: kw,
+      requestedType: type,
+      wantsSubsidy,
+      monthlyBill: bill,
+      roofAreaSqft: roof,
+      gridConnectionOk: i % 9 !== 0,
+      source,
+      notes:
+        source === 'web'
+          ? 'Submitted through the website enquiry form.'
+          : source === 'whatsapp'
+            ? 'Came in on the sales WhatsApp number.'
+            : source === 'call'
+              ? 'Logged by the sales desk.'
+              : 'Walk-in at the office.',
+      status: status === 'lost' ? 'lost' : status,
+      assignedTo: i % 2 === 0 ? 'Priya Sharma' : 'Arjun Nair',
+      createdAt,
+      qualifiedAt: ['qualified', 'survey_scheduled', 'surveyed', 'survey_approved', 'quoted', 'won'].includes(status)
+        ? iso(Math.max(createdDays - 1, 0))
+        : undefined,
+      lostReason: status === 'lost' ? 'Price higher than competitor quote' : undefined,
+      nextActionAt: createdDays <= 2 ? addDays(createdAt, 1) : undefined,
+    };
+    enquiries.push(enquiry);
+
+    // Survey for surveyed+ states
+    if (['survey_scheduled', 'surveyed', 'survey_approved', 'quoted'].includes(status)) {
+      const scheduledDays = Math.max(createdDays - 2, 0);
+      const completedDays = ['surveyed', 'survey_approved', 'quoted'].includes(status) ? Math.max(createdDays - 3, 0) : undefined;
+      const approved = ['survey_approved', 'quoted'].includes(status);
+      const survey: Survey = {
+        id: next('survey', 'SUR'),
+        ref: next('surveyRef', 'SUR'),
+        enquiryId: enquiry.id,
+        customerId,
+        scheduledAt: iso(scheduledDays, 11),
+        completedAt: completedDays != null ? iso(completedDays, 15) : undefined,
+        technicianId: `T${(i % 15) + 1}`,
+        roofDirection: completedDays != null ? ['South', 'South-East', 'South-West', 'East', 'West'][i % 5] : undefined,
+        tiltDegrees: completedDays != null ? 8 + (i % 8) : undefined,
+        cableDistanceM: completedDays != null ? 12 + (i % 30) : undefined,
+        shadowFreeAreaSqft: completedDays != null ? roof : undefined,
+        structureType: completedDays != null ? (type === 'off-grid' ? 'RCC Roof' : 'Metal Sheet') : undefined,
+        findings: completedDays != null ? `Shadow-free area measured; ${kw} kW layout fits. Cable route clear.` : undefined,
+        recommendedKw: completedDays != null ? kw : undefined,
+        recommendedType: completedDays != null ? type : undefined,
+        status: approved ? 'approved' : completedDays != null ? 'completed' : 'scheduled',
+        approvedBy: approved ? 'Rajesh Menon' : undefined,
+        approvedAt: approved ? iso(Math.max(createdDays - 4, 0), 17) : undefined,
+      };
+      surveys.push(survey);
+
+      if (status === 'quoted') {
+        const items = buildBom(kw, type);
+        const totals = quoteTotals(items, 0, 0.138);
+        const labour = estimatedLabourCost(kw);
+        const margin = totals.subtotal - totals.costTotal - labour;
+        const quotedAt = iso(Math.max(createdDays - 5, 0), 12);
+        const quote: Quote = {
+          id: next('quote', 'QTN'),
+          ref: next('quoteRef', 'QTN'),
+          enquiryId: enquiry.id,
+          surveyId: survey.id,
+          customerId,
+          customerName: name,
+          capacityKw: kw,
+          systemType: type,
+          items,
+          subtotal: totals.subtotal,
+          discount: 0,
+          taxRate: 0.138,
+          taxAmount: totals.taxAmount,
+          total: totals.total,
+          costTotal: totals.costTotal,
+          estLabourCost: labour,
+          margin,
+          marginPct: totals.subtotal ? Math.round((margin / totals.subtotal) * 100) : 0,
+          subsidyExpected: wantsSubsidy ? subsidyFor(kw) : 0,
+          status: i % 3 === 0 ? 'accepted' : 'sent',
+          validUntil: addDays(quotedAt, 15),
+          createdAt: quotedAt,
+        };
+        quotes.push(quote);
+      }
+    }
+  }
+
   // ---- Service tickets -------------------------------------------------
   interface TicketSeed {
     key: string;

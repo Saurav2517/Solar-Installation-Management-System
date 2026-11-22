@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import PortalLayout from './components/PortalLayout';
 import { ToastProvider } from './components/ui';
 import { AuthProvider, RequireAdmin, RequireCustomer } from './lib/auth';
+import { ThemeProvider } from './lib/theme';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Enquiries from './pages/Enquiries';
@@ -25,11 +26,14 @@ import Intake from './pages/Intake';
 import Shop from './pages/portal/Shop';
 import PortalOrders from './pages/portal/Orders';
 import PortalOrderDetail from './pages/portal/OrderDetail';
+import PortalService from './pages/portal/Service';
+import PortalPay from './pages/portal/Pay';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/enquire" element={<Intake />} />
@@ -45,6 +49,8 @@ export default function App() {
             <Route index element={<Shop />} />
             <Route path="orders" element={<PortalOrders />} />
             <Route path="orders/:id" element={<PortalOrderDetail />} />
+            <Route path="orders/:id/pay" element={<PortalPay />} />
+            <Route path="service" element={<PortalService />} />
           </Route>
 
           <Route
@@ -74,8 +80,9 @@ export default function App() {
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </ToastProvider>
-    </AuthProvider>
+          </Routes>
+        </ToastProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

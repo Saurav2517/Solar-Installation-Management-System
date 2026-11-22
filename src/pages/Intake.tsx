@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Icon } from '../components/Icon';
+import { ThemeToggle } from '../components/ThemeToggle';
 import { Btn, Field, Input, Select, Textarea, useToast } from '../components/ui';
 import { api } from '../lib/api';
 import { inr, inrCompact } from '../lib/format';
 import type { CapacityKw, SystemType } from '../../shared/types';
+import { SUPPORTED_CITIES, pincodeErrorForCity } from '../../shared/pincodes';
+import { phoneError } from '../../shared/validation';
 
 interface PackageRow {
   kw: number;
@@ -56,11 +59,13 @@ export default function Intake() {
 
   const submit = async () => {
     setError(null);
-    if (form.pincode && !/^\d{6}$/.test(form.pincode.trim())) { setError('Pincode must be a 6-digit number'); return; }
+    const pinErr = pincodeErrorForCity(form.pincode, form.city);
+    if (pinErr) { setError(pinErr); return; }
     if (form.monthlyBill && (Number.isNaN(Number(form.monthlyBill)) || Number(form.monthlyBill) < 0)) { setError('Monthly electricity bill cannot be negative'); return; }
     if (form.roofAreaSqft && (Number.isNaN(Number(form.roofAreaSqft)) || Number(form.roofAreaSqft) < 0)) { setError('Roof area cannot be negative'); return; }
     if (!form.name.trim()) { setError('Your name is required'); return; }
-    if (!form.phone.trim()) { setError('Phone number is required'); return; }
+    const phoneErr = phoneError(form.phone);
+    if (phoneErr) { setError(phoneErr); return; }
     if (!form.address.trim()) { setError('Rooftop address is required'); return; }
     setBusy(true);
     try {
@@ -92,7 +97,7 @@ export default function Intake() {
   const visible = packages.filter((p) => p.type === type);
 
   return (
-    <div className="min-h-screen bg-[#fdf8ee] text-slate-900">
+    <div className="min-h-screen bg-[#fdf8ee] text-slate-900 dark:bg-[#0b1220]">
       <header className="border-b border-amber-100 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
           <div className="flex items-center gap-2.5">
@@ -104,9 +109,12 @@ export default function Intake() {
               <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-amber-700">Rooftop solar</p>
             </div>
           </div>
-          <Link to="/login" className="text-xs font-semibold text-slate-600 hover:text-amber-700">
-            Sign in →
-          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link to="/login" className="text-xs font-semibold text-slate-600 hover:text-amber-700">
+              Sign in →
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -186,7 +194,14 @@ export default function Intake() {
                 </Field>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Phone">
-                    <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+91 …" />
+                    <Input
+                      value={form.phone}
+                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                      placeholder="10-digit number"
+                      inputMode="numeric"
+                      maxLength={10}
+                      pattern="\d{10}"
+                    />
                   </Field>
                   <Field label="Email">
                     <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="optional" />
@@ -201,7 +216,13 @@ export default function Intake() {
                 </Field>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="City">
-                    <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+                    <Select value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}>
+                      {SUPPORTED_CITIES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </Select>
                   </Field>
                   <Field label="Pincode">
                     <Input value={form.pincode} onChange={(e) => setForm({ ...form, pincode: e.target.value })} maxLength={6} inputMode="numeric" pattern="\d{6}" placeholder="6-digit" />

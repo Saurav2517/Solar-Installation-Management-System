@@ -21,6 +21,8 @@ import { api, useApi } from '../lib/api';
 import { capacityText, inr, timeAgo } from '../lib/format';
 import type { EnquiriesData, EnquiryRow } from '../lib/types';
 import type { CapacityKw, EnquirySource, SystemType } from '../../shared/types';
+import { SUPPORTED_CITIES, pincodeErrorForCity } from '../../shared/pincodes';
+import { phoneError } from '../../shared/validation';
 
 const TABS = [
   { id: 'all', label: 'All' },
@@ -109,11 +111,13 @@ export default function Enquiries() {
 
   const submit = async () => {
     setFormError(null);
-    if (form.pincode && !/^\d{6}$/.test(form.pincode.trim())) { setFormError('Pincode must be a 6-digit number'); return; }
+    const pinErr = pincodeErrorForCity(form.pincode, form.city);
+    if (pinErr) { setFormError(pinErr); return; }
     if (form.monthlyBill && (Number.isNaN(Number(form.monthlyBill)) || Number(form.monthlyBill) < 0)) { setFormError('Monthly electricity bill cannot be negative'); return; }
     if (form.roofAreaSqft && (Number.isNaN(Number(form.roofAreaSqft)) || Number(form.roofAreaSqft) < 0)) { setFormError('Roof area cannot be negative'); return; }
     if (!form.name.trim()) { setFormError('Customer name is required'); return; }
-    if (!form.phone.trim()) { setFormError('Phone number is required'); return; }
+    const phoneErr = phoneError(form.phone);
+    if (phoneErr) { setFormError(phoneErr); return; }
     if (!form.address.trim()) { setFormError('Site address is required'); return; }
     setBusy(true);
     try {
@@ -252,7 +256,14 @@ export default function Enquiries() {
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" />
           </Field>
           <Field label="Phone">
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="+91 …" />
+            <Input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              placeholder="10-digit number"
+              inputMode="numeric"
+              maxLength={10}
+              pattern="\d{10}"
+            />
           </Field>
           <Field label="Email">
             <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="optional" />
@@ -269,7 +280,13 @@ export default function Enquiries() {
             <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="House / plot, street, area" />
           </Field>
           <Field label="City">
-            <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+            <Select value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}>
+              {SUPPORTED_CITIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Pincode">
             <Input value={form.pincode} onChange={(e) => setForm({ ...form, pincode: e.target.value })} maxLength={6} inputMode="numeric" pattern="\d{6}" placeholder="6-digit" />

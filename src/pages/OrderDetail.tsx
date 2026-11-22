@@ -60,7 +60,7 @@ export default function OrderDetail() {
   };
 
   const confirmOrder = () => {
-    const amount = Number(advance || Math.round(order.total * 0.3));
+    const amount = Number(advance || (order.paidAmount > 0 ? 0 : Math.round(order.total * 0.3)));
     void run(
       () =>
         api.post(`/orders/${order.id}/confirm`, {
@@ -119,12 +119,16 @@ export default function OrderDetail() {
               {fmtDate(order.createdAt)}. Confirming reserves serial numbers, raises the invoice and schedules the crew.
             </p>
             <div className="mt-3 flex flex-wrap items-end gap-2">
-              <Field label="Advance received (₹)" className="w-40">
+              <Field
+                label={order.paidAmount > 0 ? 'Extra advance (₹)' : 'Advance received (₹)'}
+                className="w-40"
+                hint={order.paidAmount > 0 ? `${inr(order.paidAmount)} already collected online` : undefined}
+              >
                 <Input
                   type="number"
                   value={advance}
                   onChange={(e) => setAdvance(e.target.value)}
-                  placeholder={String(Math.round(order.total * 0.3))}
+                  placeholder={order.paidAmount > 0 ? '0' : String(Math.round(order.total * 0.3))}
                 />
               </Field>
               <Field label="Method" className="w-32">
@@ -142,7 +146,11 @@ export default function OrderDetail() {
               <Btn variant="primary" disabled={busy} onClick={confirmOrder}>
                 Confirm order
               </Btn>
-              <span className="text-[11px] text-slate-600">Leave the advance blank to take 30%.</span>
+              <span className="text-[11px] text-slate-600">
+                {order.paidAmount > 0
+                  ? 'Leave blank to confirm without another payment.'
+                  : 'Leave the advance blank to take 30%.'}
+              </span>
             </div>
           </div>
         </Card>
@@ -244,6 +252,7 @@ export default function OrderDetail() {
                       <th>Date</th>
                       <th>Type</th>
                       <th>Method</th>
+                      <th>Status</th>
                       <th className="text-right">Amount</th>
                     </tr>
                   </thead>
@@ -254,6 +263,15 @@ export default function OrderDetail() {
                         <td className="whitespace-nowrap text-[11px]">{fmtDate(p.receivedAt)}</td>
                         <td className="text-[11px] capitalize">{p.kind}</td>
                         <td className="text-[11px] uppercase">{p.method}</td>
+                        <td>
+                          {p.status === 'pending' ? (
+                            <Badge tone="amber">Pending</Badge>
+                          ) : p.status === 'rejected' ? (
+                            <Badge tone="red">Rejected</Badge>
+                          ) : (
+                            <Badge tone="green">Verified</Badge>
+                          )}
+                        </td>
                         <td className="mono text-right text-xs font-semibold">{inr(p.amount)}</td>
                       </tr>
                     ))}

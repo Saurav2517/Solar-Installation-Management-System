@@ -1,10 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Icon } from './Icon';
+import { ThemeToggle } from './ThemeToggle';
 import { useAuth } from '../lib/auth';
 
 const NAV = [
   { to: '/portal', label: 'Shop', icon: 'package', end: true },
   { to: '/portal/orders', label: 'My orders', icon: 'receipt', end: false },
+  { to: '/portal/service', label: 'Service', icon: 'headset', end: false },
 ];
 
 export default function PortalLayout() {
@@ -44,6 +46,7 @@ export default function PortalLayout() {
           </nav>
 
           <div className="ml-auto flex items-center gap-3">
+            <ThemeToggle />
             <div className="hidden text-right sm:block">
               <p className="text-xs font-semibold text-slate-800">{account?.name}</p>
               <p className="text-[10px] text-slate-500">{account?.email}</p>

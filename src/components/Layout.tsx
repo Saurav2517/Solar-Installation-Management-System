@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Icon } from './Icon';
+import { ThemeToggle } from './ThemeToggle';
 import type { Role } from '../../shared/types';
 
 const ALL: Role[] = ['director', 'sales', 'warehouse', 'crew', 'support'];
@@ -194,6 +195,7 @@ export default function Layout() {
                 {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
               </p>
             </div>
+            <ThemeToggle />
             <div className="hidden items-center gap-2 sm:flex">
               <div className="text-right">
                 <p className="text-xs font-semibold text-slate-800">{account?.name ?? 'SunPower staff'}</p>

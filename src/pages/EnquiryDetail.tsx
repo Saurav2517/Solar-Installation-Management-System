@@ -35,6 +35,9 @@ export default function EnquiryDetail() {
     monthlyBill: '',
     roofAreaSqft: '',
     gridConnectionOk: true,
+    roofDirection: 'South',
+    tiltDegrees: '',
+    cableDistanceM: '',
     notes: '',
   });
   const [surveyForm, setSurveyForm] = useState({
@@ -62,6 +65,9 @@ export default function EnquiryDetail() {
       monthlyBill: enquiry.monthlyBill ? String(enquiry.monthlyBill) : '',
       roofAreaSqft: enquiry.roofAreaSqft ? String(enquiry.roofAreaSqft) : '',
       gridConnectionOk: enquiry.gridConnectionOk ?? true,
+      roofDirection: enquiry.roofDirection ?? 'South',
+      tiltDegrees: enquiry.tiltDegrees !== undefined ? String(enquiry.tiltDegrees) : '',
+      cableDistanceM: enquiry.cableDistanceM !== undefined ? String(enquiry.cableDistanceM) : '',
       notes: '',
     });
     setSurveyResult((s) => ({
@@ -74,7 +80,18 @@ export default function EnquiryDetail() {
       ...s,
       technicianId: s.technicianId || data?.technicians.find((t) => t.role === 'lead')?.id || '',
     }));
-  }, [enquiry?.id, enquiry?.monthlyBill, enquiry?.roofAreaSqft, enquiry?.requestedKw, enquiry?.requestedType, data?.technicians]);
+  }, [
+    enquiry?.id,
+    enquiry?.monthlyBill,
+    enquiry?.roofAreaSqft,
+    enquiry?.gridConnectionOk,
+    enquiry?.roofDirection,
+    enquiry?.tiltDegrees,
+    enquiry?.cableDistanceM,
+    enquiry?.requestedKw,
+    enquiry?.requestedType,
+    data?.technicians,
+  ]);
 
   const run = async (fn: () => Promise<unknown>, message: string) => {
     setBusy(true);
@@ -157,7 +174,7 @@ export default function EnquiryDetail() {
             <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
               <div>
                 <h2 className="section-title">1 · Qualify the enquiry</h2>
-                <p className="mt-0.5 text-xs text-slate-500">Roof space, electricity bill and grid connection before anyone visits.</p>
+                <p className="mt-0.5 text-xs text-slate-500">Roof space, electricity bill, direction, tilt and cable run before anyone visits.</p>
               </div>
               {!canQualify && <Badge tone="green">Done</Badge>}
             </div>
@@ -191,6 +208,36 @@ export default function EnquiryDetail() {
                       <option value="no">Not suitable</option>
                     </Select>
                   </Field>
+                  <Field label="Roof direction">
+                    <Select
+                      value={qualify.roofDirection}
+                      onChange={(e) => setQualify({ ...qualify, roofDirection: e.target.value })}
+                    >
+                      {['South', 'South-East', 'South-West', 'East', 'West', 'North', 'Flat'].map((dir) => (
+                        <option key={dir} value={dir}>
+                          {dir}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Roof tilt (°)">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={qualify.tiltDegrees}
+                      onChange={(e) => setQualify({ ...qualify, tiltDegrees: e.target.value })}
+                      placeholder="12"
+                    />
+                  </Field>
+                  <Field label="Cable distance (m)">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={qualify.cableDistanceM}
+                      onChange={(e) => setQualify({ ...qualify, cableDistanceM: e.target.value })}
+                      placeholder="25"
+                    />
+                  </Field>
                   <Field label="Call notes" className="sm:col-span-3">
                     <Textarea
                       value={qualify.notes}
@@ -198,7 +245,7 @@ export default function EnquiryDetail() {
                       placeholder="Roof type, shading, customer expectations, timeline…"
                     />
                   </Field>
-                  <div className="sm:col-span-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:col-span-3">
                     <Btn
                       variant="primary"
                       disabled={busy}
@@ -207,12 +254,19 @@ export default function EnquiryDetail() {
                         const ra = Number(qualify.roofAreaSqft);
                         if (!qualify.monthlyBill || Number.isNaN(mb) || mb < 0) { toast('Monthly electricity bill cannot be negative or empty', 'error'); return; }
                         if (!qualify.roofAreaSqft || Number.isNaN(ra) || ra < 0) { toast('Shadow-free roof area cannot be negative or empty', 'error'); return; }
+                        const tilt = qualify.tiltDegrees === '' ? undefined : Number(qualify.tiltDegrees);
+                        const cable = qualify.cableDistanceM === '' ? undefined : Number(qualify.cableDistanceM);
+                        if (tilt !== undefined && (Number.isNaN(tilt) || tilt < 0)) { toast('Roof tilt cannot be negative', 'error'); return; }
+                        if (cable !== undefined && (Number.isNaN(cable) || cable < 0)) { toast('Cable distance cannot be negative', 'error'); return; }
                         void run(
                           () =>
                             api.post(`/enquiries/${enquiry.id}/qualify`, {
                               monthlyBill: mb,
                               roofAreaSqft: ra,
                               gridConnectionOk: qualify.gridConnectionOk,
+                              roofDirection: qualify.roofDirection,
+                              tiltDegrees: tilt,
+                              cableDistanceM: cable,
                               notes: qualify.notes,
                             }),
                           'Enquiry qualified',
@@ -221,6 +275,16 @@ export default function EnquiryDetail() {
                     >
                       Save & qualify
                     </Btn>
+                    <Btn
+                      variant="danger"
+                      disabled={busy}
+                      onClick={() => {
+                        setLostReason('Site conditions not suitable');
+                        setLostOpen(true);
+                      }}
+                    >
+                      Reject
+                    </Btn>
                   </div>
                 </div>
               ) : (
@@ -228,6 +292,9 @@ export default function EnquiryDetail() {
                   <KV label="Monthly bill" value={inr(enquiry.monthlyBill)} />
                   <KV label="Shadow-free roof" value={enquiry.roofAreaSqft ? `${enquiry.roofAreaSqft} sq ft` : '—'} />
                   <KV label="Grid connection" value={enquiry.gridConnectionOk ? 'Suitable' : 'Not suitable'} />
+                  <KV label="Roof direction" value={enquiry.roofDirection ?? '—'} />
+                  <KV label="Roof tilt" value={enquiry.tiltDegrees !== undefined ? `${enquiry.tiltDegrees}°` : '—'} />
+                  <KV label="Cable distance" value={enquiry.cableDistanceM !== undefined ? `${enquiry.cableDistanceM} m` : '—'} />
                   <KV label="Assigned to" value={enquiry.assignedTo ?? 'Unassigned'} />
                 </dl>
               )}

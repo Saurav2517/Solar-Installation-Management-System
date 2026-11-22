@@ -85,6 +85,9 @@ export interface Enquiry {
   monthlyBill?: number;
   roofAreaSqft?: number;
   gridConnectionOk?: boolean;
+  roofDirection?: string;
+  tiltDegrees?: number;
+  cableDistanceM?: number;
   source: EnquirySource;
   notes?: string;
   status: EnquiryStatus;
@@ -200,6 +203,7 @@ export interface Order {
 
 export type PaymentMethod = 'cash' | 'upi' | 'bank' | 'card' | 'cheque';
 export type PaymentKind = 'advance' | 'balance' | 'service' | 'subsidy';
+export type PaymentVerification = 'pending' | 'verified' | 'rejected';
 
 export interface Payment {
   id: string;
@@ -213,6 +217,12 @@ export interface Payment {
   reference?: string;
   receivedAt: string;
   receivedBy?: string;
+  /** UPI QR payments start as pending until the office checks the screenshot. */
+  status?: PaymentVerification;
+  proof?: string;
+  reviewNote?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
 }
 
 export type InstallationStatus = 'scheduled' | 'in_progress' | 'completed';

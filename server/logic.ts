@@ -33,6 +33,8 @@ import type {
   TicketPriority,
   Timesheet,
 } from '../shared/types';
+import { pincodeErrorForCity } from '../shared/pincodes';
+import { phoneError } from '../shared/validation';
 
 export class ApiError extends Error {
   status: number;
@@ -54,6 +56,10 @@ export function nextRef(db: DB, key: string, prefix: string) {
   db.counters[key] = (db.counters[key] ?? 0) + 1;
   return `${prefix}-${String(db.counters[key]).padStart(4, '0')}`;
 }
+
+/** Share of the order value the customer pays online while placing the order. */
+export const ADVANCE_RATE = 0.2;
+export const advanceFor = (order: Order) => Math.round(order.total * ADVANCE_RATE);
 
 export function jobProfit(order: Order) {
   return order.total - order.costTotal - order.labourCost - order.otherCost;
@@ -126,11 +132,14 @@ export interface EnquiryInput {
 export function createEnquiry(db: DB, input: EnquiryInput): Enquiry {
   const name = require_(input.name?.trim(), 'Customer name is required');
   const phone = require_(input.phone?.trim(), 'Phone number is required');
+  const phoneErr = phoneError(phone);
+  if (phoneErr) throw new ApiError(400, phoneErr);
   const address = require_(input.address?.trim(), 'Site address is required');
   const capacityKw = Number(input.capacityKw);
   if (![1, 2, 3, 4, 5].includes(capacityKw)) throw new ApiError(400, 'System size must be between 1 and 5 kW');
 
-  if (input.pincode && !/^\d{6}$/.test(input.pincode.trim())) throw new ApiError(400, 'Pincode must be a 6-digit number');
+  const pincodeError = pincodeErrorForCity(input.pincode, input.city?.trim() || 'Bengaluru');
+  if (pincodeError) throw new ApiError(400, pincodeError);
   if (input.monthlyBill !== undefined && input.monthlyBill !== null) {
     const mb = Number(input.monthlyBill);
     if (!Number.isFinite(mb) || mb < 0) throw new ApiError(400, 'Monthly electricity bill cannot be negative');
@@ -190,7 +199,14 @@ export function createEnquiry(db: DB, input: EnquiryInput): Enquiry {
 
 export function updateEnquiry(db: DB, id: string, patch: Partial<Enquiry> & { notes?: string }) {
   const enquiry = findEnquiry(db, id);
-  if (patch.pincode !== undefined && patch.pincode !== null && String(patch.pincode).trim() !== '' && !/^\d{6}$/.test(String(patch.pincode).trim())) throw new ApiError(400, 'Pincode must be a 6-digit number');
+  if (patch.phone !== undefined) {
+    const phoneErr = phoneError(patch.phone);
+    if (phoneErr) throw new ApiError(400, phoneErr);
+  }
+  const nextCity = (patch.city ?? enquiry.city) as string | undefined;
+  const nextPincode = patch.pincode !== undefined ? patch.pincode : enquiry.pincode;
+  const pincodeError = pincodeErrorForCity(nextPincode, nextCity);
+  if (pincodeError) throw new ApiError(400, pincodeError);
   if (patch.monthlyBill !== undefined && patch.monthlyBill !== null) {
     const mb = Number(patch.monthlyBill);
     if (!Number.isFinite(mb) || mb < 0) throw new ApiError(400, 'Monthly electricity bill cannot be negative');
@@ -212,6 +228,9 @@ export function updateEnquiry(db: DB, id: string, patch: Partial<Enquiry> & { no
     'monthlyBill',
     'roofAreaSqft',
     'gridConnectionOk',
+    'roofDirection',
+    'tiltDegrees',
+    'cableDistanceM',
     'assignedTo',
     'notes',
     'status',
@@ -227,7 +246,16 @@ export function updateEnquiry(db: DB, id: string, patch: Partial<Enquiry> & { no
 export function qualifyEnquiry(
   db: DB,
   id: string,
-  input: { monthlyBill: number; roofAreaSqft: number; gridConnectionOk: boolean; assignedTo?: string; notes?: string },
+  input: {
+    monthlyBill: number;
+    roofAreaSqft: number;
+    gridConnectionOk: boolean;
+    roofDirection?: string;
+    tiltDegrees?: number;
+    cableDistanceM?: number;
+    assignedTo?: string;
+    notes?: string;
+  },
 ) {
   const enquiry = findEnquiry(db, id);
   if (enquiry.status === 'lost' || enquiry.status === 'won') throw new ApiError(400, 'This enquiry is already closed');
@@ -235,9 +263,16 @@ export function qualifyEnquiry(
   const ra = Number(input.roofAreaSqft);
   if (!Number.isFinite(mb) || mb < 0) throw new ApiError(400, 'Monthly electricity bill cannot be negative');
   if (!Number.isFinite(ra) || ra < 0) throw new ApiError(400, 'Roof area cannot be negative');
+  const tilt = input.tiltDegrees === undefined ? undefined : Number(input.tiltDegrees);
+  const cable = input.cableDistanceM === undefined ? undefined : Number(input.cableDistanceM);
+  if (tilt !== undefined && (!Number.isFinite(tilt) || tilt < 0)) throw new ApiError(400, 'Roof tilt cannot be negative');
+  if (cable !== undefined && (!Number.isFinite(cable) || cable < 0)) throw new ApiError(400, 'Cable distance cannot be negative');
   enquiry.monthlyBill = mb;
   enquiry.roofAreaSqft = ra;
   enquiry.gridConnectionOk = !!input.gridConnectionOk;
+  if (input.roofDirection !== undefined) enquiry.roofDirection = input.roofDirection;
+  if (tilt !== undefined) enquiry.tiltDegrees = tilt;
+  if (cable !== undefined) enquiry.cableDistanceM = cable;
   enquiry.assignedTo = input.assignedTo ?? enquiry.assignedTo;
   if (input.notes) enquiry.notes = input.notes;
   if (!enquiry.gridConnectionOk) {
@@ -680,9 +715,12 @@ export function confirmOrder(
   const order = findOrder(db, id);
   if (order.status !== 'requested') throw new ApiError(400, `${order.ref} is already confirmed`);
 
-  const advance = Number(input.advance);
-  if (!advance || advance <= 0) throw new ApiError(400, 'Record an advance or full payment before work starts');
-  if (advance > order.total + 1) throw new ApiError(400, 'Advance cannot exceed the order total');
+  const advance = Number(input.advance ?? 0);
+  if (!Number.isFinite(advance) || advance < 0) throw new ApiError(400, 'Advance cannot be negative');
+  if (order.paidAmount <= 0 && advance <= 0) {
+    throw new ApiError(400, 'Collect the 20% advance or a full payment before work starts');
+  }
+  if (advance > order.total - order.paidAmount + 1) throw new ApiError(400, 'Advance cannot exceed the balance due');
 
   const crewIds =
     input.crewIds && input.crewIds.length
@@ -705,7 +743,16 @@ export function confirmOrder(
   if (order.wantsSubsidy) order.subsidyId = createOrderSubsidy(db, order).id;
   order.installationId = createOrderInstallation(db, order).id;
 
-  addOrderPayment(db, order.id, { amount: advance, method: input.method ?? 'bank', kind: 'advance' });
+  // The advance is often already collected online while the customer placed the order.
+  if (order.paidAmount > 0) {
+    invoice.paidAmount = order.paidAmount;
+    invoice.status = invoice.paidAmount >= invoice.total - 1 ? 'paid' : 'sent';
+    invoice.issuedAt = nowIso();
+    if (invoice.status === 'paid') invoice.paidAt = invoice.issuedAt;
+  }
+  if (advance > 0) {
+    addOrderPayment(db, order.id, { amount: advance, method: input.method ?? 'bank', kind: 'advance' });
+  }
 
   const quote = db.quotes.find((q) => q.id === order.quoteId);
   const enquiry = quote ? db.enquiries.find((e) => e.id === quote.enquiryId) : undefined;
@@ -841,9 +888,41 @@ export function customerOrderView(db: DB, order: Order) {
   const invoice = db.invoices.find((i) => i.orderId === order.id);
   const subsidy = db.subsidies.find((s) => s.orderId === order.id);
   const installation = db.installations.find((i) => i.orderId === order.id);
+  const balance = Math.max(0, order.total - order.paidAmount);
+  const advanceOutstanding = order.status === 'requested' ? Math.max(0, advanceFor(order) - order.paidAmount) : 0;
+  const pending = pendingPaymentFor(db, order.id);
+  const payable =
+    !pending &&
+    (order.status === 'cancelled' ? false : order.status === 'requested' ? advanceOutstanding > 0 : balance > 0);
   return {
     order: publicOrder(order),
     steps: orderSteps(db, order),
+    payable,
+    payKind: payable ? (order.status === 'requested' ? 'advance' : 'balance') : null,
+    advanceRate: ADVANCE_RATE,
+    advanceTarget: advanceFor(order),
+    advanceOutstanding,
+    pendingPayment: pending
+      ? {
+          ref: pending.ref,
+          amount: pending.amount,
+          kind: pending.kind,
+          submittedAt: pending.receivedAt,
+          proof: pending.proof,
+        }
+      : undefined,
+    payments: db.payments
+      .filter((p) => p.orderId === order.id)
+      .map((p) => ({
+        ref: p.ref,
+        amount: p.amount,
+        method: p.method,
+        kind: p.kind,
+        reference: p.reference,
+        receivedAt: p.receivedAt,
+        status: p.status ?? 'verified',
+        reviewNote: p.reviewNote,
+      })),
     invoice: invoice
       ? {
           number: invoice.number,
@@ -876,6 +955,28 @@ export function customerOrderView(db: DB, order: Order) {
   };
 }
 
+/** Post money against an order: balance, invoice status and closing all follow from it. */
+function applyPaymentToOrder(db: DB, order: Order, amount: number) {
+  order.paidAmount += amount;
+  order.paymentStatus = order.paidAmount >= order.total - 1 ? 'paid' : 'advance';
+  if (order.paymentStatus === 'paid' && order.status === 'installed') {
+    order.status = 'closed';
+    order.closedAt = nowIso();
+  }
+
+  const invoice = db.invoices.find((i) => i.orderId === order.id);
+  if (invoice) {
+    invoice.paidAmount = order.paidAmount;
+    if (invoice.paidAmount >= invoice.total - 1) {
+      invoice.status = 'paid';
+      invoice.paidAt = nowIso();
+    } else if (invoice.status === 'draft') {
+      invoice.status = 'sent';
+      invoice.issuedAt = invoice.issuedAt ?? nowIso();
+    }
+  }
+}
+
 export function addOrderPayment(
   db: DB,
   orderId: string,
@@ -883,7 +984,9 @@ export function addOrderPayment(
 ) {
   const order = findOrder(db, orderId);
   if (order.status === 'cancelled') throw new ApiError(400, 'Order is cancelled');
-  if (order.status === 'requested') throw new ApiError(400, 'Confirm the order request before recording payments');
+  if (order.status === 'requested' && input.kind !== 'advance') {
+    throw new ApiError(400, 'Confirm the order request before recording payments');
+  }
   const amount = Number(input.amount);
   if (!amount || amount <= 0) throw new ApiError(400, 'Payment amount must be greater than zero');
   const due = order.total - order.paidAmount;
@@ -904,25 +1007,100 @@ export function addOrderPayment(
   payment.ref = payment.id;
   db.payments.unshift(payment);
 
-  order.paidAmount += amount;
-  order.paymentStatus = order.paidAmount >= order.total - 1 ? 'paid' : 'advance';
-  if (order.paymentStatus === 'paid' && order.status === 'installed') {
-    order.status = 'closed';
-    order.closedAt = nowIso();
+  applyPaymentToOrder(db, order, amount);
+  return { order, payment };
+}
+
+/* ------------------------ UPI QR payments -------------------------- */
+
+/** The screenshot a customer sent for this order, waiting for the office to check it. */
+export function pendingPaymentFor(db: DB, orderId: string) {
+  return db.payments.find((p) => p.orderId === orderId && p.status === 'pending');
+}
+
+/**
+ * Customer pays on the SunPower UPI QR and uploads the payment screenshot. The money is
+ * not posted to the order yet — it waits here until the office verifies the screenshot.
+ */
+export function submitPaymentProof(
+  db: DB,
+  customerId: string,
+  orderId: string,
+  input: { amount?: number; proof: string },
+) {
+  const order = findOrder(db, orderId);
+  if (order.customerId !== customerId) throw new ApiError(404, 'Order not found');
+  if (order.status === 'cancelled') throw new ApiError(400, 'This order was cancelled');
+
+  const waiting = pendingPaymentFor(db, order.id);
+  if (waiting) {
+    throw new ApiError(400, `${waiting.ref} is still being verified — SunPower will confirm it shortly`);
   }
 
-  const invoice = db.invoices.find((i) => i.orderId === order.id);
-  if (invoice) {
-    invoice.paidAmount = order.paidAmount;
-    if (invoice.paidAmount >= invoice.total - 1) {
-      invoice.status = 'paid';
-      invoice.paidAt = nowIso();
-    } else if (invoice.status === 'draft') {
-      invoice.status = 'sent';
-      invoice.issuedAt = invoice.issuedAt ?? nowIso();
+  // A request awaiting confirmation collects the fixed 20% advance; after that any part of the balance.
+  const isAdvance = order.status === 'requested';
+  const advanceOutstanding = Math.max(0, advanceFor(order) - order.paidAmount);
+  const balance = Math.max(0, order.total - order.paidAmount);
+  if (isAdvance) {
+    if (advanceOutstanding <= 0) {
+      throw new ApiError(400, 'The 20% advance is already paid — SunPower will confirm your order shortly');
     }
+  } else if (balance <= 0) {
+    throw new ApiError(400, 'This order is already fully paid');
   }
-  return { order, payment };
+
+  const amount = isAdvance ? advanceOutstanding : input.amount == null ? balance : Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) throw new ApiError(400, 'Enter an amount greater than zero');
+  if (amount > balance + 1) {
+    throw new ApiError(400, `You can pay at most ₹${Math.round(balance).toLocaleString('en-IN')} on this order`);
+  }
+
+  const proof = String(input.proof ?? '');
+  if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(proof)) {
+    throw new ApiError(400, 'Attach a screenshot of the payment (PNG, JPG or WEBP)');
+  }
+  if (proof.length > 3_000_000) throw new ApiError(400, 'That screenshot is too large — attach a smaller image');
+
+  const payment: Payment = {
+    id: nextRef(db, 'payment', 'PAY'),
+    ref: '',
+    orderId: order.id,
+    customerId,
+    amount: Math.round(amount * 100) / 100,
+    method: 'upi',
+    kind: isAdvance ? 'advance' : 'balance',
+    reference: 'UPI-QR',
+    receivedAt: nowIso(),
+    receivedBy: 'UPI QR — customer submitted',
+    status: 'pending',
+    proof,
+  };
+  payment.ref = payment.id;
+  db.payments.unshift(payment);
+  return payment;
+}
+
+/** Office checks the UPI screenshot: approve to post the money, reject to ask for another. */
+export function verifyPayment(
+  db: DB,
+  id: string,
+  input: { approved: boolean; note?: string; reviewedBy?: string },
+) {
+  const payment = db.payments.find((p) => p.id === id || p.ref === id);
+  if (!payment) throw new ApiError(404, 'Payment not found');
+  if (payment.status !== 'pending') throw new ApiError(400, 'This payment has already been reviewed');
+
+  payment.status = input.approved ? 'verified' : 'rejected';
+  payment.reviewedAt = nowIso();
+  payment.reviewedBy = input.reviewedBy ?? 'Priya Sharma';
+  if (input.note?.trim()) payment.reviewNote = input.note.trim();
+
+  if (input.approved && payment.orderId) {
+    const order = findOrder(db, payment.orderId);
+    if (order.status === 'cancelled') throw new ApiError(400, 'The order for this payment was cancelled');
+    applyPaymentToOrder(db, order, payment.amount);
+  }
+  return payment;
 }
 
 export function scanSerial(db: DB, orderId: string, serialNo: string) {
@@ -1200,6 +1378,85 @@ export function createTicket(
   ticket.ref = ticket.id;
   db.tickets.unshift(ticket);
   return ticket;
+}
+
+/** Customer-safe ticket shape — no internal parts cost, labour cost or warranty cost. */
+export function customerTicketView(db: DB, ticket: Ticket) {
+  const product = db.products.find((p) => p.id === ticket.productId);
+  return {
+    id: ticket.id,
+    ref: ticket.ref,
+    orderId: ticket.orderId,
+    serialId: ticket.serialId,
+    serialNo: ticket.serialNo,
+    productId: ticket.productId,
+    productName: product?.name,
+    faultCode: ticket.faultCode,
+    description: ticket.description,
+    priority: ticket.priority,
+    status: ticket.status,
+    reportedAt: ticket.reportedAt,
+    assignedTo: ticket.assignedTo,
+    warrantyStatus: ticket.warrantyStatus,
+    warrantyEnd: ticket.warrantyEnd,
+    diagnosis: ticket.diagnosis,
+    resolution: ticket.resolution,
+    resolvedAt: ticket.resolvedAt,
+    confirmedAt: ticket.confirmedAt,
+    slaDueAt: ticket.slaDueAt,
+  };
+}
+
+export function customerTickets(db: DB, customerId: string) {
+  return db.tickets
+    .filter((t) => t.customerId === customerId)
+    .sort((a, b) => b.reportedAt.localeCompare(a.reportedAt))
+    .map((t) => customerTicketView(db, t));
+}
+
+/** Installed (or dispatched) equipment registered to this customer, for the ticket form. */
+export function customerSerials(db: DB, customerId: string) {
+  return db.serials
+    .filter((s) => s.customerId === customerId && !!s.orderId)
+    .map((s) => {
+      const product = db.products.find((p) => p.id === s.productId);
+      const order = db.orders.find((o) => o.id === s.orderId);
+      return {
+        id: s.id,
+        serialNo: s.serialNo,
+        productId: s.productId,
+        productName: product?.name ?? s.productId,
+        category: product?.category,
+        orderId: s.orderId,
+        orderRef: order?.ref,
+        status: s.status,
+        warrantyEnd: s.warrantyEnd,
+        inWarranty: !!s.warrantyEnd && new Date(s.warrantyEnd).getTime() > Date.now(),
+      };
+    })
+    .sort((a, b) => a.productName.localeCompare(b.productName) || a.serialNo.localeCompare(b.serialNo));
+}
+
+export function createCustomerTicket(
+  db: DB,
+  customerId: string,
+  input: { serialNo?: string; faultCode?: string; description: string; priority?: TicketPriority },
+) {
+  const serialNo = input.serialNo?.trim();
+  if (serialNo) {
+    const code = serialNo.toUpperCase();
+    const unit = db.serials.find(
+      (s) => (s.serialNo.toUpperCase() === code || s.id.toUpperCase() === code) && s.customerId === customerId,
+    );
+    if (!unit) throw new ApiError(403, 'That serial number is not registered to your account');
+  }
+  return createTicket(db, {
+    customerId,
+    serialNo: serialNo || undefined,
+    faultCode: input.faultCode,
+    description: input.description,
+    priority: input.priority,
+  });
 }
 
 export function updateTicket(

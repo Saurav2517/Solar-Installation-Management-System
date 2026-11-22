@@ -48,6 +48,7 @@ const TYPES: Array<{ id: SystemType; label: string; blurb: string }> = [
 ];
 
 const GST = 0.138;
+const ADVANCE_RATE = 0.2;
 
 export default function Shop() {
   const navigate = useNavigate();
@@ -83,7 +84,8 @@ export default function Shop() {
       const pkg = data?.packages.find((p) => p.sku === l.sku);
       return sum + (pkg?.subsidy ?? 0) * l.qty;
     }, 0);
-    return { net, tax, total: net + tax, subsidy };
+    const total = net + tax;
+    return { net, tax, total, subsidy, advance: Math.round(total * ADVANCE_RATE) };
   }, [cart, data]);
 
   const placeOrder = async () => {
@@ -95,8 +97,8 @@ export default function Shop() {
         wantsSubsidy,
         notes,
       });
-      toast(`Order ${result.order.ref} sent to SunPower`);
-      navigate(`/portal/orders/${result.order.id}`);
+      toast(`Order ${result.order.ref} created — pay the 20% advance to confirm it`);
+      navigate(`/portal/orders/${result.order.id}/pay`);
     } catch (err) {
       toast((err as Error).message, 'error');
     } finally {
@@ -267,6 +269,14 @@ export default function Shop() {
                       Up to {inr(totals.subsidy)} PM Surya Ghar subsidy may apply.
                     </p>
                   )}
+                  <div className="flex justify-between rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-amber-900">
+                    <span>Advance payable now (20%)</span>
+                    <span className="mono">{inr(totals.advance)}</span>
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-500">
+                    <span>Balance after advance</span>
+                    <span className="mono">{inr(totals.total - totals.advance)}</span>
+                  </div>
                 </div>
 
                 <div className="space-y-3 border-t border-slate-100 px-5 py-4">
@@ -287,10 +297,10 @@ export default function Shop() {
                     className="input text-xs"
                   />
                   <Btn variant="accent" className="w-full justify-center" disabled={placing} onClick={() => void placeOrder()}>
-                    {placing ? 'Sending…' : 'Place order request'}
+                    {placing ? 'Creating your order…' : `Place order & pay ${inr(totals.advance)} advance`}
                   </Btn>
                   <p className="text-[10px] text-slate-500">
-                    Nothing is charged now. SunPower confirms the order and the advance with you.
+                    You pay a 20% advance now to confirm the order. The balance is due once the system is installed.
                   </p>
                 </div>
               </>
