@@ -1,14 +1,5 @@
-node_modules/
-dist/
-.env
-uploads/
-*.log
-coverage/
+node_modules
+dist
+data/db.json
 .DS_Store
-Thumbs.db
-*.tsbuildinfo
-
-# Python AI service
-ai-service/__pycache__/
-ai-service/.venv/
-ai-service/*.pyc
+*.log
